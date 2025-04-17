@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Storybook Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+      padding: 2rem;
+    }
+    .generator-container {
+      max-width: 700px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 1rem;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .tooltip {
+      font-size: 0.9rem;
+      color: gray;
+    }
+    #result {
+      margin-top: 30px;
+      padding: 15px;
+      background-color: #e8f5e9;
+      border-left: 5px solid #4CAF50;
+      white-space: pre-line;
+    }
+    #imagePreview {
+      margin-top: 20px;
+      max-width: 100%;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="generator-container">
+    <h2>Generate Your Storybook</h2>
+    <form id="storyForm">
+      <label for="topic">Topic:
+        <span class="tooltip">e.g., Biology, Business, Psychology</span>
+      </label>
+      <input type="text" id="topic" required>
+
+      <label for="age">Age Group:
+        <span class="tooltip">Choose an appropriate age group</span>
+      </label>
+      <select id="age" required>
+        <option value="">Select Age Group</option>
+        <option value="5-7">5–7</option>
+        <option value="8-10">8–10</option>
+        <option value="11-13">11–13</option>
+      </select>
+
+      <label for="length">Story Length:
+        <span class="tooltip">Short, Medium, or Long</span>
+      </label>
+      <select id="length" required>
+        <option value="">Select Length</option>
+        <option value="short">Short</option>
+        <option value="medium">Medium</option>
+        <option value="long">Long</option>
+      </select>
+
+      <button type="submit">Generate Story</button>
+    </form>
+
+    <div id="result"></div>
+    <img id="imagePreview" src="" alt="" style="display:none;" />
+
+    <div style="margin-top: 20px;">
+      <button id="downloadTxt" style="margin-right: 10px;">Download as .txt</button>
+      <button id="downloadPdf">Download as PDF</button>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    const form = document.getElementById('storyForm');
+    const resultBox = document.getElementById('result');
+    const imagePreview = document.getElementById('imagePreview');
+
+    // Load saved values from localStorage
+    window.onload = () => {
+      if (localStorage.getItem('topic')) document.getElementById('topic').value = localStorage.getItem('topic');
+      if (localStorage.getItem('age')) document.getElementById('age').value = localStorage.getItem('age');
+      if (localStorage.getItem('length')) document.getElementById('length').value = localStorage.getItem('length');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const topic = document.getElementById('topic').value;
+      const age = document.getElementById('age').value;
+      const length = document.getElementById('length').value;
+
+      localStorage.setItem('topic', topic);
+      localStorage.setItem('age', age);
+      localStorage.setItem('length', length);
+
+
+
+
+
+
+
+
+      resultBox.textContent = 'Generating story...';
+      imagePreview.style.display = 'none';
+      imagePreview.src = '';
+
+      try {
+        // Step 1: Call GPT story generator
+        const storyResponse = await fetch('/api/generate/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, age, length })
+        });
+        const storyData = await storyResponse.json();
+        const story = storyData.story;
+
+        resultBox.textContent = story;
+
+        // Step 2: Call Stable Diffusion image generator
+        const imageResponse = await fetch('/api/image/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: story })
+        });
+        const imageData = await imageResponse.json();
+        const imageUrl = imageData.image_url;
+
+        imagePreview.src = imageUrl;
+        imagePreview.style.display = 'block';
+
+        // Step 3: Save story + image to history
+        const history = JSON.parse(localStorage.getItem('storyHistory')) || [];
+        history.push({ topic, age, length, story, imageUrl });
+        localStorage.setItem('storyHistory', JSON.stringify(history));
+
+      } catch (error) {
+        console.error(error);
+        resultBox.textContent = 'Failed to generate story or image.';
+      }
+    });
+
+    // Download as .txt
+    document.getElementById('downloadTxt').addEventListener('click', () => {
+      const story = resultBox.textContent;
+      const blob = new Blob([story], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'storybook.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Download as PDF
+    document.getElementById('downloadPdf').addEventListener('click', () => {
+      const story = resultBox.textContent;
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const lines = doc.splitTextToSize(story, 180);
+      doc.text(lines, 10, 10);
+
+      if (imagePreview.src) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = imagePreview.src;
+        img.onload = () => {
+          doc.addPage();
+          doc.addImage(img, 'JPEG', 10, 10, 180, 120);
+          doc.save('storybook.pdf');
+        };
+      } else {
+        doc.save('storybook.pdf');
+      }
+    });
+  </script>
+</body>
+</html>
