@@ -58,26 +58,32 @@
   </div>
 
   <script>
+
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
 
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
+      const email = loginEmail.value;
+      const password = loginPassword.value;
 
-      const response = await fetch('/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+  const res = await fetch('/login/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
 
-      const data = await response.json();
-      alert(data.message);
-      if (data.message === 'Login successful') {
-        window.location.href = '/generate/';
-      }
-    });
+  const data = await res.json();
+
+    if (res.ok) {
+      localStorage.setItem('token', data.token); // ✅ Save token
+      localStorage.setItem('username', email);   // optional: save user ID
+      alert(data.message);  // 👈 should show “Login successful”
+      window.location.href = '/generate/';
+    } else {
+      alert(data.message || 'Something went wrong.');
+    }
+  });
 
     registerForm.addEventListener('submit', async (e) => {
       e.preventDefault();

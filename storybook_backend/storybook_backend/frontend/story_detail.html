@@ -1,156 +1,260 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Story Details</title>
+  <meta charset="UTF-8">
+  <title>Story Detail</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background-color: #f2f2f2;
+      background-color: #f2f4f6;
       padding: 2rem;
+      line-height: 1.6;
     }
     .container {
       max-width: 800px;
       margin: auto;
       background: white;
       padding: 20px;
-      border-radius: 10px;
+      border-radius: 12px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
-    .story-box {
-      background: #e8f5e9;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-left: 4px solid #4CAF50;
-      white-space: pre-line;
+    .back-link {
+      margin-bottom: 10px;
+      display: inline-block;
     }
-    .story-image {
-      max-width: 100%;
-      margin: 10px 0 20px;
-      border-radius: 10px;
-      display: block;
+    h2 {
+      margin-bottom: 0.5rem;
     }
-    .comment {
-      border-bottom: 1px solid #ccc;
-      padding: 10px 0;
+    .meta {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 1rem;
     }
-    textarea {
-      width: 100%;
-      padding: 10px;
-      margin-top: 10px;
+    pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
     }
     button {
-      margin-top: 5px;
+      margin-top: 10px;
       padding: 6px 12px;
-      background: #4CAF50;
+      background-color: #4CAF50;
       color: white;
       border: none;
       cursor: pointer;
     }
+    .comment {
+      margin-top: 1rem;
+      border-top: 1px solid #ddd;
+      padding-top: 0.5rem;
+    }
+    .comment small {
+      color: #777;
+    }
+    textarea {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.5rem;
+    }
+    .back-button {
+  display: inline-block;
+  text-decoration: none;
+  padding: 8px 14px;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: bold;
+  margin-bottom: 20px;
+  transition: background-color 0.2s ease;
+}
+.back-button:hover {
+  background-color: #45a049;
+}
+
+button {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+button:hover {
+  background-color: #45a049;
+}
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>Story</h2>
-    <div class="story-box" id="storyContent">Loading story...</div>
-    <img id="storyImage" class="story-image" src="" alt="Story Image" style="display: none;" />
+    <a class="back-button" href="/dashboard/">← Back to Dashboard</a>
+    <h2 id="storyTitle">Loading...</h2>
+    <p class="meta" id="storyMeta"></p>
+    <pre id="storyContent">Fetching story...</pre>
+    <button id="downloadBtn">Download as .txt</button>
 
+    <hr>
     <h3>Comments</h3>
-    <div id="commentsList">Loading comments...</div>
-
-    <h4>Add a Comment</h4>
-    <textarea id="newComment" rows="3"></textarea>
-    <button onclick="postComment()">Post</button>
+    <div id="commentList">Loading comments...</div>
+    <div id="commentForm">
+      <textarea id="newComment" rows="3" placeholder="Write a comment..."></textarea>
+      <button id="postComment">Post Comment</button>
+    </div>
   </div>
 
   <script>
-    const storyId = new URLSearchParams(window.location.search).get('id');
-    const storyHistory = JSON.parse(localStorage.getItem('storyHistory')) || [];
-    const story = storyHistory[storyId];
+    const params = new URLSearchParams(window.location.search);
+    const storyId = params.get('id');
+    const token = localStorage.getItem('token');
+    const username = localStorage.getItem('username');
 
-    if (!story) {
-      document.getElementById('storyContent').textContent = 'Story not found.';
+    if (!storyId || !token) {
+      document.getElementById('storyContent').textContent = 'Invalid access.';
+      document.getElementById('commentList').innerHTML = '<p>You must be logged in to see comments.</p>';
+      document.getElementById('commentForm').style.display = 'none';
     } else {
-      document.getElementById('storyContent').textContent = story.story;
-      if (story.imageUrl) {
-        const img = document.getElementById('storyImage');
-        img.src = story.imageUrl;
-        img.style.display = 'block';
-      }
-    }
+      fetch('/api/stories/', {
+        method: 'GET',
+        headers: { 'Authorization': `Token ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        const story = data.find(s => s.id == storyId);
+        if (!story) {
+          document.getElementById('storyContent').textContent = 'Story not found.';
+          return;
+        }
 
-    async function loadComments() {
-      const res = await fetch(`/api/comments/${storyId}/`);
-      const comments = await res.json();
+        document.getElementById('storyTitle').textContent = story.topic;
+        document.getElementById('storyMeta').textContent =
+          `Age: ${story.age} | Length: ${story.length}`;
+        document.getElementById('storyContent').textContent = story.story;
 
-      const list = document.getElementById('commentsList');
-      list.innerHTML = '';
-
-      comments.forEach(comment => {
-        const div = document.createElement('div');
-        div.className = 'comment';
-        div.innerHTML = `
-          <strong>${comment.username}</strong> <small>${new Date(comment.timestamp).toLocaleString()}</small><br/>
-          <span id="comment-${comment.id}">${comment.content}</span>
-          ${comment.username === localStorage.getItem('username') ? `
-            <br/><button onclick="editComment(${comment.id})">Edit</button>
-            <button onclick="deleteComment(${comment.id})">Delete</button>
-          ` : ''}
-        `;
-        list.appendChild(div);
+        loadComments(story.id);
+        document.getElementById('postComment').onclick = () => {
+          postNewComment(story.id);
+        };
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('storyContent').textContent = 'Error loading story.';
       });
     }
 
-    async function postComment() {
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const text = document.getElementById('storyContent').textContent;
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'story.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // === Comments ===
+    function loadComments(storyId) {
+      fetch(`/api/comments/${storyId}/`, {
+        headers: { 'Authorization': `Token ${token}` }
+      })
+      .then(res => {
+        if (res.status === 401) {
+          document.getElementById('commentList').innerHTML = '<p>You must be logged in to view comments.</p>';
+          return [];
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        const commentList = document.getElementById('commentList');
+        commentList.innerHTML = '';
+
+        if (!data.length) {
+          commentList.innerHTML = '<p>No comments yet.</p>';
+          return;
+        }
+
+        data.forEach(comment => {
+          const div = document.createElement('div');
+          div.className = 'comment';
+          div.innerHTML = `
+            <strong>${comment.user}</strong>
+            <small> • ${new Date(comment.timestamp).toLocaleString()}</small>
+            <p id="comment-content-${comment.id}">${comment.content}</p>
+          `;
+
+          if (comment.user === username) {
+            const editBtn = document.createElement('button');
+            editBtn.textContent = 'Edit';
+            editBtn.onclick = () => editComment(comment.id, comment.content);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.style.marginLeft = '5px';
+            deleteBtn.onclick = () => deleteComment(comment.id);
+
+            div.appendChild(editBtn);
+            div.appendChild(deleteBtn);
+          }
+
+          commentList.appendChild(div);
+        });
+      });
+    }
+
+    function postNewComment(storyId) {
       const content = document.getElementById('newComment').value;
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/comments/', {
+      if (!content.trim()) return;
+
+      fetch('/api/comments/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Token ${token}`
         },
-        body: JSON.stringify({ story_id: storyId, content })
-      });
-
-      if (res.ok) {
+        body: JSON.stringify({
+          story: storyId,
+          content: content
+        })
+      })
+      .then(res => res.json())
+      .then(() => {
         document.getElementById('newComment').value = '';
-        loadComments();
-      } else {
-        alert('Login required to comment.');
-      }
+        loadComments(storyId);
+      });
     }
 
-    async function editComment(id) {
-      const newText = prompt('Edit your comment:');
-      if (!newText) return;
-      const token = localStorage.getItem('token');
+    function editComment(commentId, oldContent) {
+      const newContent = prompt("Edit your comment:", oldContent);
+      if (!newContent || newContent === oldContent) return;
 
-      const res = await fetch(`/api/comments/${id}/edit/`, {
+      fetch(`/api/comments/${commentId}/edit/`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Token ${token}`
         },
-        body: JSON.stringify({ content: newText })
+        body: JSON.stringify({ content: newContent })
+      })
+      .then(() => {
+        document.getElementById(`comment-content-${commentId}`).textContent = newContent;
       });
-
-      if (res.ok) loadComments();
     }
 
-    async function deleteComment(id) {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/comments/${id}/edit/`, {
+    function deleteComment(commentId) {
+      if (!confirm("Are you sure you want to delete this comment?")) return;
+
+      fetch(`/api/comments/${commentId}/edit/`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Token ${token}`
         }
+      })
+      .then(() => {
+        loadComments(storyId);
       });
-      if (res.ok) loadComments();
     }
-
-    loadComments();
   </script>
 </body>
 </html>

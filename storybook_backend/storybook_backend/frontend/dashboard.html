@@ -57,58 +57,54 @@
       </div>
     </div>
 
-    <h2>Your Story History</h2>
-    <div id="history"></div>
+    <h2>My Generated Stories</h2>
+    <div id="storyList"></div>
   </div>
 
   <script>
-    // Dummy profile info
-    document.getElementById('username').textContent = localStorage.getItem('username') || 'Guest';
-    document.getElementById('bio').textContent = localStorage.getItem('bio') || 'This is your story dashboard!';
+  // Set profile info from localStorage
+  document.getElementById('username').textContent = localStorage.getItem('username') || 'Guest';
+  document.getElementById('bio').textContent = localStorage.getItem('bio') || 'This is your story dashboard!';
 
-    // Load and display story history
-    const historyContainer = document.getElementById('history');
-    const storyHistory = JSON.parse(localStorage.getItem('storyHistory')) || [];
+  const storyList = document.getElementById('storyList');
+  const token = localStorage.getItem('token');
 
-    if (storyHistory.length === 0) {
-      historyContainer.innerHTML = '<p>No stories generated yet.</p>';
-    } else {
-      storyHistory.forEach((item, index) => {
+  if (!token) {
+    storyList.innerHTML = "<p>You must be logged in to view your stories.</p>";
+  } else {
+    fetch('/api/stories/', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Token ${token}`
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.length) {
+        storyList.innerHTML = "<p>You haven’t generated any stories yet.</p>";
+        return;
+      }
+
+      data.forEach((story, index) => {
         const div = document.createElement('div');
         div.className = 'story-entry';
         div.innerHTML = `
-          <strong>Story ${index + 1}</strong> — Topic: ${item.topic}, Age: ${item.age}, Length: ${item.length}<br/>
-          <button onclick="viewStory(${index})">View</button>
-          <button onclick="downloadTxt(${index})">.txt</button>
-          <button onclick="downloadPdf(${index})">PDF</button>
+          <strong>${index + 1}. ${story.topic}</strong><br>
+          Age Group: ${story.age}, Length: ${story.length}<br>
+          <a href="/story/?id=${story.id}">
+            <button>View Details</button>
+          </a>
         `;
-        historyContainer.appendChild(div);
+        storyList.appendChild(div);
       });
-    }
+    })
+    .catch(err => {
+      console.error(err);
+      storyList.innerHTML = "<p>Failed to load your stories.</p>";
+    });
+  }
+</script>
 
-    function viewStory(index) {
-      alert(storyHistory[index].story);
-    }
-
-    function downloadTxt(index) {
-      const blob = new Blob([storyHistory[index].story], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `storybook_${index + 1}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
-    function downloadPdf(index) {
-      const story = storyHistory[index].story;
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      const lines = doc.splitTextToSize(story, 180);
-      doc.text(lines, 10, 10);
-      doc.save(`storybook_${index + 1}.pdf`);
-    }
-  </script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </body>

@@ -97,107 +97,127 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <script>
-    const form = document.getElementById('storyForm');
-    const resultBox = document.getElementById('result');
-    const imagePreview = document.getElementById('imagePreview');
+  const form = document.getElementById('storyForm');
+  const resultBox = document.getElementById('result');
+  const imagePreview = document.getElementById('imagePreview');
 
-    // Load saved values from localStorage
-    window.onload = () => {
-      if (localStorage.getItem('topic')) document.getElementById('topic').value = localStorage.getItem('topic');
-      if (localStorage.getItem('age')) document.getElementById('age').value = localStorage.getItem('age');
-      if (localStorage.getItem('length')) document.getElementById('length').value = localStorage.getItem('length');
+  // Load saved values from localStorage
+  window.onload = () => {
+    const topic = localStorage.getItem('topic');
+    const age = localStorage.getItem('age');
+    const length = localStorage.getItem('length');
+    if (topic) document.getElementById('topic').value = topic;
+    if (age) document.getElementById('age').value = age;
+    if (length) document.getElementById('length').value = length;
+  };
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert("You must be logged in to generate a story.");
+      return;
     }
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
+    const topic = document.getElementById('topic').value;
+    const age = document.getElementById('age').value;
+    const length = document.getElementById('length').value;
 
-      const topic = document.getElementById('topic').value;
-      const age = document.getElementById('age').value;
-      const length = document.getElementById('length').value;
+    localStorage.setItem('topic', topic);
+    localStorage.setItem('age', age);
+    localStorage.setItem('length', length);
 
-      localStorage.setItem('topic', topic);
-      localStorage.setItem('age', age);
-      localStorage.setItem('length', length);
+    resultBox.textContent = 'Generating story...';
+    imagePreview.style.display = 'none';
+    imagePreview.src = '';
 
+    try {
+      // Step 1: Call GPT story generator API
+      console.log("Sending POST to /api/generate/ with token:", token);
+      const storyResponse = await fetch('/api/generate/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${token}`
+        },
+        body: JSON.stringify({ topic, age, length })
+      });
 
+      const rawText = await storyResponse.text();
 
-
-
-
-
-
-      resultBox.textContent = 'Generating story...';
-      imagePreview.style.display = 'none';
-      imagePreview.src = '';
-
-      try {
-        // Step 1: Call GPT story generator
-        const storyResponse = await fetch('/api/generate/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, age, length })
-        });
-        const storyData = await storyResponse.json();
-        const story = storyData.story;
-
-        resultBox.textContent = story;
-
-        // Step 2: Call Stable Diffusion image generator
-        const imageResponse = await fetch('/api/image/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: story })
-        });
-        const imageData = await imageResponse.json();
-        const imageUrl = imageData.image_url;
-
-        imagePreview.src = imageUrl;
-        imagePreview.style.display = 'block';
-
-        // Step 3: Save story + image to history
-        const history = JSON.parse(localStorage.getItem('storyHistory')) || [];
-        history.push({ topic, age, length, story, imageUrl });
-        localStorage.setItem('storyHistory', JSON.stringify(history));
-
-      } catch (error) {
-        console.error(error);
-        resultBox.textContent = 'Failed to generate story or image.';
+      if (!storyResponse.ok) {
+        console.error("API error response:", rawText);
+        throw new Error("API returned an error: " + rawText);
       }
-    });
 
-    // Download as .txt
-    document.getElementById('downloadTxt').addEventListener('click', () => {
-      const story = resultBox.textContent;
-      const blob = new Blob([story], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'storybook.txt';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+      const storyData = JSON.parse(rawText);
+      const story = storyData.story;
+      resultBox.textContent = story;
 
-    // Download as PDF
-    document.getElementById('downloadPdf').addEventListener('click', () => {
-      const story = resultBox.textContent;
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      const lines = doc.splitTextToSize(story, 180);
-      doc.text(lines, 10, 10);
+<!--      // Step 2: Call image generator (optional)-->
+<!--      const imageResponse = await fetch('/api/image/', {-->
+<!--        method: 'POST',-->
+<!--        headers: {-->
+<!--          'Content-Type': 'application/json',-->
+<!--          'Authorization': `Token ${token}`-->
+<!--        },-->
+<!--        body: JSON.stringify({ prompt: story })-->
+<!--      });-->
 
-      if (imagePreview.src) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = imagePreview.src;
-        img.onload = () => {
-          doc.addPage();
-          doc.addImage(img, 'JPEG', 10, 10, 180, 120);
-          doc.save('storybook.pdf');
-        };
-      } else {
+<!--      const imageData = await imageResponse.json();-->
+<!--      const imageUrl = imageData.image_url;-->
+
+<!--      imagePreview.src = imageUrl;-->
+<!--      imagePreview.style.display = 'block';-->
+
+      // Step 3: Save to storyHistory in localStorage
+      const history = JSON.parse(localStorage.getItem('storyHistory')) || [];
+      history.push({ topic, age, length, story});
+<!--      history.push({ topic, age, length, story, imageUrl });-->
+      localStorage.setItem('storyHistory', JSON.stringify(history));
+
+    } catch (error) {
+      console.error("Fetch error:", error);
+      resultBox.textContent = 'Failed to generate story or image.';
+      alert(error.message || "An unexpected error occurred.");
+    }
+  });
+
+  // Download as .txt
+  document.getElementById('downloadTxt').addEventListener('click', () => {
+    const story = resultBox.textContent;
+    const blob = new Blob([story], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'storybook.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Download as PDF
+  document.getElementById('downloadPdf').addEventListener('click', () => {
+    const story = resultBox.textContent;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const lines = doc.splitTextToSize(story, 180);
+    doc.text(lines, 10, 10);
+
+    if (imagePreview.src) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = imagePreview.src;
+      img.onload = () => {
+        doc.addPage();
+        doc.addImage(img, 'JPEG', 10, 10, 180, 120);
         doc.save('storybook.pdf');
-      }
-    });
-  </script>
+      };
+    } else {
+      doc.save('storybook.pdf');
+    }
+  });
+</script>
+
 </body>
 </html>
